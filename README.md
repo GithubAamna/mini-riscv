@@ -47,7 +47,7 @@ Follow these steps to clone the repository, load a program, and execute a simula
 
 1. Clone the Repository  
     *-* Open your terminal and clone the project:   
-`        git clone <https://github.com/GithubAamna/mini-riscv.git>  `  
+        `git clone <https://github.com/GithubAamna/mini-riscv.git>`  
     *-* Navigate into the folder:    
         `cd mini-riscv` 
 
