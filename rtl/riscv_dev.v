@@ -1,0 +1,163 @@
+`timescale 1ns / 1ps
+// Mini RISC-V Core
+
+module riscv_dev(
+    input clock,
+    input resetn
+);
+
+// Internal Signals
+wire [31:0]imm; 
+wire [31:0]alu_result; 
+wire [31:0]new_pc;
+wire [31:0]instruction; 
+wire [6:0]opcode;
+wire [4:0]rs1_addr, rs2_addr,rd_addr; 
+wire [2:0]func3;
+wire [6:0]func7;
+wire [31:0]rs1_data,rs2_data; 
+wire [31:0]immediate;
+wire [31:0]operand_1;
+wire [31:0]operand_2;
+
+wire beq_jal_cond;
+wire jalr_cond;
+wire lui_cond;
+wire mem2reg;
+wire mem_write;
+wire alu_op;
+wire operand_sel;
+wire reg_write; 
+wire branch;
+wire jump_and_link;
+wire br_equal;
+wire take_branch;
+wire [31:0]mem_result;
+wire [4:0]dest_register;
+wire [31:0]intermediate_dest_in;
+wire [31:0]dest_in;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PROGRAM COUNTER
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+program_counter pc_1(
+    .clock(clock),
+    .resetn(resetn),
+    .imm(immediate),
+    .alu_result(alu_result),
+    .beq_jal_cond(take_branch|jump_and_link),
+    .jalr_cond(jalr_cond),
+    .pc(new_pc)
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// INSTRUCTION MEMORY
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+imem instruction_mem_1(
+    .addr(new_pc[9:2]), 
+    .instruction(instruction)
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// INSTRUCTION DECODER
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+instr_dec instr_dec_1(
+    .instruction(instruction),
+    .opcode(opcode),
+    .rs1_addr(rs1_addr),
+    .rs2_addr(rs2_addr),
+    .rd_addr(rd_addr),
+    .func3(func3),
+    .func7(func7)
+);
+
+assign dest_register = rd_addr ;
+assign intermediate_dest_in = mem2reg ? mem_result : alu_result;
+assign dest_in = (take_branch | jump_and_link |jalr_cond) ? new_pc + 4 : intermediate_dest_in;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// REGISTER FILE
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+reg_file register_file_1(
+    .clock(clock),
+    .resetn(resetn),
+    .write_en(reg_write),
+    .rs1_addr(rs1_addr),
+    .rs2_addr(rs2_addr),
+    .rd_addr(dest_register),
+    .write_data(dest_in),
+    .rs1_data(rs1_data),
+    .rs2_data(rs2_data)
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMMEDIATE GENERATOR UNIT
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+immediate_gen immediate_gen_1
+(
+    .instruction(instruction),
+    .immediate(immediate)
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CONTROL LOGIC UNIT
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+control_logic control_logic_1(
+    .opcode(opcode),
+    .func3(func3),
+    .func7(func7),
+    .mem2reg(mem2reg), 
+    .mem_write(mem_write),
+    .alu_op(alu_op),
+    .operand_sel(operand_sel), 
+    .reg_write(reg_write), 
+    .branch(branch),
+    .jump_and_link(jump_and_link),
+    .jalr_cond(jalr_cond),
+    .lui_cond(lui_cond)
+);
+
+assign operand_1 = (lui_cond ? 32'b0 :rs1_data);
+assign operand_2 = (operand_sel ? immediate : rs2_data);
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ARITHMETIC LOGIC UNIT
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+alu arithmetic_logic_unit(
+    .operand_1(operand_1),
+    .operand_2(operand_2),
+    .alu_op(alu_op),
+    .alu_result(alu_result)
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// BRANCH COMPARATOR
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+branch_comp b1(
+    .rs1_data(operand_1),
+    .rs2_data(operand_2),
+    .br_equal(br_equal)
+);
+
+assign take_branch = (br_equal & branch);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// DATA MEMORY
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+dmem data_mem(
+    .clock(clock),
+    .resetn(resetn),
+    .mem_addr(alu_result[6:2]), //to use memory space efficiently
+    .write_en(mem_write),
+    .data_in(rs2_data),
+    .data_out(mem_result)
+);
+
+
+endmodule
